@@ -1,0 +1,65 @@
+{
+  "name": "mcp-openapi-bridge",
+  "version": "1.0.0",
+  "description": "Generic MCP server that bridges any OpenAPI 3.x REST API to Claude Code — one tool per endpoint, auto-discovered from the spec.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-openapi-bridge": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "server.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "openapi",
+    "rest",
+    "claude",
+    "ai",
+    "llm",
+    "bridge",
+    "anthropic"
+  ],
+  "license": "MIT",
+  "mcpName": "io.github.murilojrpereira/mcp-openapi-bridge",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/murilojrpereira/mcp-openapi-bridge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/murilojrpereira/mcp-openapi-bridge/issues"
+  },
+  "homepage": "https://github.com/murilojrpereira/mcp-openapi-bridge#readme",
+  "scripts": {
+    "prepare": "npm run build",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "nodemon --watch \"src/**\" --ext \"ts\" --exec \"npm run build && npm run start\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.2",
+    "dotenv": "^16.4.7",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^4.1.0",
+    "nodemon": "^3.0.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.0"
+  }
+}

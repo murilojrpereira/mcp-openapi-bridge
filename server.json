@@ -1,0 +1,110 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.murilojrpereira/mcp-openapi-bridge",
+  "description": "Generic MCP server that bridges any OpenAPI 3.x REST API to Claude Code — auto-generates one MCP tool per endpoint from the spec.",
+  "repository": {
+    "url": "https://github.com/murilojrpereira/mcp-openapi-bridge",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "mcp-openapi-bridge",
+      "version": "1.0.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "API_BASE_URL",
+          "description": "Base URL of the REST API, e.g. https://api.stripe.com",
+          "isRequired": true,
+          "isSecret": false
+        },
+        {
+          "name": "OPENAPI_SPEC_PATH",
+          "description": "Local file path to the OpenAPI spec (.json, .yaml, or .yml)",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "OPENAPI_SPEC_URL",
+          "description": "URL to fetch the OpenAPI spec from (cached for 1 hour)",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "OPENAPI_TOKEN",
+          "description": "Bearer token for Authorization header. Can also be passed per-call via the bearer_token tool argument.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "OPENAPI_API_KEY",
+          "description": "API key value. Use with OPENAPI_API_KEY_HEADER or OPENAPI_API_KEY_PARAM.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "OPENAPI_API_KEY_HEADER",
+          "description": "Header name for API key auth, e.g. X-API-Key",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "OPENAPI_API_KEY_PARAM",
+          "description": "Query parameter name for API key auth, e.g. api_key",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "OPENAPI_CUSTOM_HEADERS",
+          "description": "Extra headers applied to every request. Format: Header-Name=value,Other-Header=value2",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "OPENAPI_INCLUDE_TAGS",
+          "description": "Comma-separated OpenAPI tags to include. Only operations with these tags are registered as tools.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "OPENAPI_EXCLUDE_TAGS",
+          "description": "Comma-separated OpenAPI tags to exclude.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "OPENAPI_PATH_PREFIX",
+          "description": "Only register operations whose path starts with this prefix, e.g. /v1/",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "OPENAPI_MAX_TOOLS",
+          "description": "Maximum number of tools to register (default: 128). Large specs may exceed Claude's context limit.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "MCP_TRANSPORT",
+          "description": "Set to 'http' to run the hosted HTTP transport instead of stdio.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "PORT",
+          "description": "Port the HTTP server listens on when MCP_TRANSPORT=http. Defaults to 8080.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "MCP_AUTH_TOKEN",
+          "description": "Bearer token required by the hosted /mcp HTTP endpoint when MCP_TRANSPORT=http. Recommended for public-routable deployments.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

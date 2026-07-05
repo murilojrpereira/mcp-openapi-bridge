@@ -1,0 +1,47 @@
+name: Push to ECR
+
+on:
+  workflow_dispatch:
+    inputs:
+      aws_region:
+        description: "AWS region"
+        required: true
+        default: "us-east-1"
+      ecr_repository:
+        description: "ECR repository name"
+        required: true
+        default: "mcp-openapi-bridge"
+      image_tag:
+        description: "Image tag (defaults to git SHA)"
+        required: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+        run: |
+          docker build -f Dockerfile.agentcore \
+            -t $ECR_REGISTRY/${{ inputs.ecr_repository }}:$IMAGE_TAG \
+            -t $ECR_REGISTRY/${{ inputs.ecr_repository }}:latest \
+            .
+          docker push $ECR_REGISTRY/${{ inputs.ecr_repository }}:$IMAGE_TAG
+          docker push $ECR_REGISTRY/${{ inputs.ecr_repository }}:latest
+          echo "Pushed: $ECR_REGISTRY/${{ inputs.ecr_repository }}:$IMAGE_TAG"

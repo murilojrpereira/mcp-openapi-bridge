@@ -1,0 +1,52 @@
+name: Bump Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: "Version bump type"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version and push tag
+        id: bump
+        run: |
+          NEW_TAG=$(npm version ${{ inputs.version_type }} -m "chore: release v%s")
+          git push origin main --follow-tags
+          echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # A push made with GITHUB_TOKEN never triggers other workflows
+          # (GitHub's anti-recursion safeguard), so the tag push above won't
+          # fire release.yml's `on: push: tags:` trigger on its own.
+          # Explicitly dispatching it here works around that.
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "${{ steps.bump.outputs.tag }}"

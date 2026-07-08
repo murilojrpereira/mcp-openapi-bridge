@@ -145,6 +145,8 @@ docker run -p 8080:8080 \
 
 For public-routable deployments, set `MCP_AUTH_TOKEN` and configure clients to send `Authorization: Bearer <token>` to `/mcp`.
 
+See [`docs/deployment.md`](docs/deployment.md) for a full hosting guide (AWS, Cloudflare, and other platforms) and [`docs/aws-bedrock-deployment.md`](docs/aws-bedrock-deployment.md) for a step-by-step Bedrock AgentCore walkthrough.
+
 ## Spec caching
 
 When using `OPENAPI_SPEC_URL`, the spec is cached locally for 1 hour (in `~/.cache/mcp-openapi-bridge/`). Override with `OPENAPI_SPEC_CACHE_TTL_SECONDS`.

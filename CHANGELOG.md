@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-09
+
+### Added
+- `docs/deployment.md` — runtime modes, required env vars, and hosting tables for AWS, Cloudflare, and other container platforms
+- `docs/aws-bedrock-deployment.md` — step-by-step Bedrock AgentCore Runtime deployment walkthrough, plus a note on the alternative Bedrock Action Group path
+
 ## [1.0.0] - 2026-07-05
 
 ### Added

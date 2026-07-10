@@ -1,147 +1,147 @@
-export interface OpenAPISpec {
-  openapi: string;
-  info: { title: string; version: string; description?: string };
-  servers?: Array<{ url: string; description?: string }>;
-  paths?: Record<string, PathItem>;
-  components?: Components;
-  security?: SecurityRequirement[];
-  tags?: Array<{ name: string; description?: string }>;
+export interface AuthConfig {
+  apiKeyHeader?: { name: string; value: string };
+  apiKeyQuery?: { param: string; value: string };
+  bearerToken?: string;
+  customHeaders: Record<string, string>;
 }
 
-export interface PathItem {
-  summary?: string;
-  description?: string;
-  get?: Operation;
-  put?: Operation;
-  post?: Operation;
-  delete?: Operation;
-  options?: Operation;
-  head?: Operation;
-  patch?: Operation;
-  trace?: Operation;
-  parameters?: Array<Parameter | Ref>;
+export interface Components {
+  parameters?: Record<string, Parameter | Ref>;
+  requestBodies?: Record<string, Ref | RequestBody>;
+  responses?: Record<string, Ref | Response>;
+  schemas?: Record<string, Ref | SchemaObject>;
+  securitySchemes?: Record<string, Ref | SecurityScheme>;
 }
 
-export interface Operation {
-  operationId?: string;
-  summary?: string;
-  description?: string;
-  tags?: string[];
-  parameters?: Array<Parameter | Ref>;
-  requestBody?: RequestBody | Ref;
-  responses?: Record<string, Response | Ref>;
-  security?: SecurityRequirement[];
-  deprecated?: boolean;
+export interface ExecutorConfig {
+  authConfig: AuthConfig;
+  baseUrl: string;
 }
 
-export interface Parameter {
-  name: string;
-  in: "path" | "query" | "header" | "cookie";
-  required?: boolean;
-  description?: string;
-  schema?: SchemaObject | Ref;
-  style?: string;
-  explode?: boolean;
-}
+export type HttpMethod = "delete" | "get" | "head" | "options" | "patch" | "post" | "put" | "trace";
 
-export interface RequestBody {
-  description?: string;
-  required?: boolean;
-  content: Record<string, MediaType>;
+export interface McpToolResult {
+  [key: string]: unknown;
+  content: { text: string; type: "text" }[];
+  isError?: boolean;
 }
 
 export interface MediaType {
-  schema?: SchemaObject | Ref;
+  schema?: Ref | SchemaObject;
 }
 
-export interface Response {
-  description: string;
-  content?: Record<string, MediaType>;
+export interface OpenAPISpec {
+  components?: Components;
+  info: { description?: string; title: string; version: string };
+  openapi: string;
+  paths?: Record<string, PathItem>;
+  security?: SecurityRequirement[];
+  servers?: { description?: string; url: string }[];
+  tags?: { description?: string; name: string }[];
 }
 
-export interface SchemaObject {
-  type?: string | string[];
-  format?: string;
+export interface Operation {
+  deprecated?: boolean;
   description?: string;
-  properties?: Record<string, SchemaObject | Ref>;
-  required?: string[];
-  items?: SchemaObject | Ref;
-  enum?: unknown[];
-  allOf?: Array<SchemaObject | Ref>;
-  anyOf?: Array<SchemaObject | Ref>;
-  oneOf?: Array<SchemaObject | Ref>;
-  nullable?: boolean;
-  default?: unknown;
-  minimum?: number;
-  maximum?: number;
-  minLength?: number;
-  maxLength?: number;
-  pattern?: string;
-  additionalProperties?: boolean | SchemaObject | Ref;
+  operationId?: string;
+  parameters?: (Parameter | Ref)[];
+  requestBody?: Ref | RequestBody;
+  responses?: Record<string, Ref | Response>;
+  security?: SecurityRequirement[];
+  summary?: string;
+  tags?: string[];
+}
+
+export interface Parameter {
+  description?: string;
+  explode?: boolean;
+  in: "cookie" | "header" | "path" | "query";
+  name: string;
+  required?: boolean;
+  schema?: Ref | SchemaObject;
+  style?: string;
+}
+
+export interface PathItem {
+  delete?: Operation;
+  description?: string;
+  get?: Operation;
+  head?: Operation;
+  options?: Operation;
+  parameters?: (Parameter | Ref)[];
+  patch?: Operation;
+  post?: Operation;
+  put?: Operation;
+  summary?: string;
+  trace?: Operation;
 }
 
 export interface Ref {
   $ref: string;
 }
 
-export interface Components {
-  schemas?: Record<string, SchemaObject | Ref>;
-  parameters?: Record<string, Parameter | Ref>;
-  requestBodies?: Record<string, RequestBody | Ref>;
-  responses?: Record<string, Response | Ref>;
-  securitySchemes?: Record<string, SecurityScheme | Ref>;
+export interface RequestBody {
+  content: Record<string, MediaType>;
+  description?: string;
+  required?: boolean;
 }
 
-export type SecurityScheme =
-  | { type: "http"; scheme: "bearer"; bearerFormat?: string; description?: string }
-  | { type: "http"; scheme: "basic"; description?: string }
-  | { type: "apiKey"; in: "header" | "query" | "cookie"; name: string; description?: string }
-  | { type: "oauth2"; flows: object; description?: string }
-  | { type: "openIdConnect"; openIdConnectUrl: string; description?: string };
+export interface ResolvedOperation {
+  deprecated: boolean;
+  description?: string;
+  method: HttpMethod;
+  operationId: string;
+  parameters: ResolvedParameter[];
+  path: string;
+  requestBodyContentType: string;
+  requestBodyRequired: boolean;
+  requestBodySchema?: SchemaObject;
+  summary?: string;
+  tags?: string[];
+}
+
+export type ResolvedParameter = {
+  schema?: SchemaObject;
+} & Omit<Parameter, "schema">;
+
+export interface Response {
+  content?: Record<string, MediaType>;
+  description: string;
+}
+
+export interface SchemaObject {
+  additionalProperties?: boolean | Ref | SchemaObject;
+  allOf?: (Ref | SchemaObject)[];
+  anyOf?: (Ref | SchemaObject)[];
+  default?: unknown;
+  description?: string;
+  enum?: unknown[];
+  format?: string;
+  items?: Ref | SchemaObject;
+  maximum?: number;
+  maxLength?: number;
+  minimum?: number;
+  minLength?: number;
+  nullable?: boolean;
+  oneOf?: (Ref | SchemaObject)[];
+  pattern?: string;
+  properties?: Record<string, Ref | SchemaObject>;
+  required?: string[];
+  type?: string | string[];
+}
 
 export type SecurityRequirement = Record<string, string[]>;
 
-export type ResolvedParameter = Omit<Parameter, "schema"> & {
-  schema?: SchemaObject;
-};
-
-export type HttpMethod = "get" | "post" | "put" | "patch" | "delete" | "head" | "options" | "trace";
-
-export interface ResolvedOperation {
-  operationId: string;
-  method: HttpMethod;
-  path: string;
-  summary?: string;
-  description?: string;
-  tags?: string[];
-  parameters: ResolvedParameter[];
-  requestBodySchema?: SchemaObject;
-  requestBodyRequired: boolean;
-  requestBodyContentType: string;
-  deprecated: boolean;
-}
-
-export type AuthConfig = {
-  bearerToken?: string;
-  apiKeyHeader?: { name: string; value: string };
-  apiKeyQuery?: { param: string; value: string };
-  customHeaders: Record<string, string>;
-};
+export type SecurityScheme =
+  | { bearerFormat?: string; description?: string; scheme: "bearer"; type: "http" }
+  | { description?: string; flows: object; type: "oauth2" }
+  | { description?: string; in: "cookie" | "header" | "query"; name: string; type: "apiKey" }
+  | { description?: string; openIdConnectUrl: string; type: "openIdConnect" }
+  | { description?: string; scheme: "basic"; type: "http" };
 
 export interface SpecFilters {
-  includeTags?: string[];
   excludeTags?: string[];
-  pathPrefix?: string;
+  includeTags?: string[];
   maxTools: number;
+  pathPrefix?: string;
 }
-
-export interface ExecutorConfig {
-  baseUrl: string;
-  authConfig: AuthConfig;
-}
-
-export type McpToolResult = {
-  [key: string]: unknown;
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-};

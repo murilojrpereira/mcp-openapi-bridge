@@ -91,14 +91,14 @@ describe("applyAuth", () => {
     const headers: Record<string, string> = {};
     const query = new URLSearchParams();
     applyAuth(headers, query, { customHeaders: {}, bearerToken: "tok" }, {});
-    expect(headers["Authorization"]).toBe("Bearer tok");
+    expect(headers.Authorization).toBe("Bearer tok");
   });
 
   it("per-call bearer_token overrides global bearer", () => {
     const headers: Record<string, string> = {};
     const query = new URLSearchParams();
     applyAuth(headers, query, { customHeaders: {}, bearerToken: "global" }, { bearerToken: "per-call" });
-    expect(headers["Authorization"]).toBe("Bearer per-call");
+    expect(headers.Authorization).toBe("Bearer per-call");
   });
 
   it("sets custom header for apiKeyHeader", () => {
@@ -122,7 +122,7 @@ describe("applyAuth", () => {
       headers,
       query,
       { customHeaders: { "X-Global": "global", "X-Shared": "base" } },
-      { customHeaders: { "X-Call": "call", "X-Shared": "override" } }
+      { customHeaders: { "X-Call": "call", "X-Shared": "override" } },
     );
     expect(headers["X-Global"]).toBe("global");
     expect(headers["X-Call"]).toBe("call");
@@ -140,9 +140,9 @@ describe("applyAuth", () => {
         apiKeyHeader: { name: "X-Key", value: "k" },
         customHeaders: { "X-Extra": "v" },
       },
-      {}
+      {},
     );
-    expect(headers["Authorization"]).toBe("Bearer tok");
+    expect(headers.Authorization).toBe("Bearer tok");
     expect(headers["X-Key"]).toBe("k");
     expect(headers["X-Extra"]).toBe("v");
   });

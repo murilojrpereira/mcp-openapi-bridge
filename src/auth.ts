@@ -1,5 +1,30 @@
 import type { AuthConfig } from "./types.js";
 
+export function applyAuth(
+  headers: Record<string, string>,
+  query: URLSearchParams,
+  authConfig: AuthConfig,
+  callOverrides: { bearerToken?: string; customHeaders?: Record<string, string> },
+): void {
+  const effectiveBearer = callOverrides.bearerToken ?? authConfig.bearerToken;
+  if (effectiveBearer) {
+    headers.Authorization = `Bearer ${effectiveBearer}`;
+  }
+
+  if (authConfig.apiKeyHeader) {
+    headers[authConfig.apiKeyHeader.name] = authConfig.apiKeyHeader.value;
+  }
+
+  if (authConfig.apiKeyQuery) {
+    query.set(authConfig.apiKeyQuery.param, authConfig.apiKeyQuery.value);
+  }
+
+  const mergedCustom = { ...authConfig.customHeaders, ...(callOverrides.customHeaders ?? {}) };
+  for (const [name, value] of Object.entries(mergedCustom)) {
+    headers[name] = value;
+  }
+}
+
 export function parseCustomHeaders(raw: string): Record<string, string> {
   const result: Record<string, string> = {};
   if (!raw.trim()) return result;
@@ -29,29 +54,4 @@ export function resolveAuthConfig(): AuthConfig {
   if (apiKey && apiKeyParam) authConfig.apiKeyQuery = { param: apiKeyParam, value: apiKey };
 
   return authConfig;
-}
-
-export function applyAuth(
-  headers: Record<string, string>,
-  query: URLSearchParams,
-  authConfig: AuthConfig,
-  callOverrides: { bearerToken?: string; customHeaders?: Record<string, string> }
-): void {
-  const effectiveBearer = callOverrides.bearerToken ?? authConfig.bearerToken;
-  if (effectiveBearer) {
-    headers["Authorization"] = `Bearer ${effectiveBearer}`;
-  }
-
-  if (authConfig.apiKeyHeader) {
-    headers[authConfig.apiKeyHeader.name] = authConfig.apiKeyHeader.value;
-  }
-
-  if (authConfig.apiKeyQuery) {
-    query.set(authConfig.apiKeyQuery.param, authConfig.apiKeyQuery.value);
-  }
-
-  const mergedCustom = { ...authConfig.customHeaders, ...(callOverrides.customHeaders ?? {}) };
-  for (const [name, value] of Object.entries(mergedCustom)) {
-    headers[name] = value;
-  }
 }

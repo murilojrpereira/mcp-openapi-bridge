@@ -1,6 +1,6 @@
+import type { OpenAPISpec, Ref, SchemaObject } from "../types.js";
 import { describe, expect, it } from "vitest";
 import { extractOperations, isRef, loadAndParseSpec, resolveRef, resolveSchema } from "../schema.js";
-import type { OpenAPISpec, Ref, SchemaObject } from "../types.js";
 
 const PETSTORE_SPEC: OpenAPISpec = {
   openapi: "3.0.0",
@@ -20,7 +20,11 @@ const PETSTORE_SPEC: OpenAPISpec = {
         tags: ["pets"],
         requestBody: {
           required: true,
-          content: { "application/json": { schema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } } },
+          content: {
+            "application/json": {
+              schema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+            },
+          },
         },
         responses: { "201": { description: "Created" } },
       },
@@ -120,7 +124,11 @@ describe("resolveSchema", () => {
     const ref: Ref = { $ref: "#/components/schemas/Node" };
     const resolved = resolveSchema(ref, circularSpec);
     expect(resolved?.type).toBe("object");
-    const childSchema = resolveSchema(resolved?.properties?.["child"] as Ref, circularSpec, new Set(["#/components/schemas/Node"]));
+    const childSchema = resolveSchema(
+      resolved?.properties?.child,
+      circularSpec,
+      new Set(["#/components/schemas/Node"]),
+    );
     expect(childSchema?.description).toBe("[circular]");
   });
 });

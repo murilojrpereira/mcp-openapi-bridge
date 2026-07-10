@@ -1,6 +1,6 @@
+import type { AuthConfig, ExecutorConfig, ResolvedOperation } from "../types.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildUrl, executeOperation } from "../executor.js";
-import type { AuthConfig, ExecutorConfig, ResolvedOperation } from "../types.js";
 
 const noAuth: AuthConfig = { customHeaders: {} };
 const config: ExecutorConfig = { baseUrl: "https://api.example.com", authConfig: noAuth };
@@ -100,7 +100,7 @@ describe("executeOperation", () => {
         json: () => Promise.resolve(body),
         text: () => Promise.resolve(String(body)),
         body: null,
-      })
+      }),
     );
   }
 
@@ -134,7 +134,7 @@ describe("executeOperation", () => {
     vi.stubGlobal("fetch", fetchMock);
     await executeOperation(makeOp(), { bearer_token: "per-call-token" }, config);
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect((init.headers as Record<string, string>)["Authorization"]).toBe("Bearer per-call-token");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer per-call-token");
   });
 
   it("passes custom_headers from args", async () => {
@@ -156,7 +156,12 @@ describe("executeOperation", () => {
       json: () => Promise.resolve({ id: 2 }),
     });
     vi.stubGlobal("fetch", fetchMock);
-    const op = makeOp({ method: "post", path: "/items", requestBodyRequired: true, requestBodyContentType: "application/json" });
+    const op = makeOp({
+      method: "post",
+      path: "/items",
+      requestBodyRequired: true,
+      requestBodyContentType: "application/json",
+    });
     await executeOperation(op, { body: { name: "Spot" } }, config);
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe("POST");

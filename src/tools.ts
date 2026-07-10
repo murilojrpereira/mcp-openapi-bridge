@@ -1,12 +1,8 @@
+import type { ExecutorConfig, ResolvedOperation } from "./types.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { executeOperation } from "./executor.js";
 import { schemaToZod } from "./zod.js";
-import type { ExecutorConfig, ResolvedOperation } from "./types.js";
-
-export function operationToToolName(op: ResolvedOperation): string {
-  return op.operationId;
-}
 
 export function operationToDescription(op: ResolvedOperation): string {
   const parts: string[] = [];
@@ -20,7 +16,11 @@ export function operationToDescription(op: ResolvedOperation): string {
   return parts.join(" — ");
 }
 
-const RESERVED_ARGS = new Set(["body", "bearer_token", "custom_headers"]);
+export function operationToToolName(op: ResolvedOperation): string {
+  return op.operationId;
+}
+
+const RESERVED_ARGS = new Set(["bearer_token", "body", "custom_headers"]);
 
 export function buildToolArgsSchema(op: ResolvedOperation): Record<string, z.ZodTypeAny> {
   const shape: Record<string, z.ZodTypeAny> = {};
@@ -38,7 +38,9 @@ export function buildToolArgsSchema(op: ResolvedOperation): Record<string, z.Zod
 
     if (RESERVED_ARGS.has(argName)) {
       argName = `param_${argName}`;
-      console.error(`[mcp-openapi-bridge] Parameter name "${param.name}" collides with reserved arg — renamed to "${argName}"`);
+      console.error(
+        `[mcp-openapi-bridge] Parameter name "${param.name}" collides with reserved arg — renamed to "${argName}"`,
+      );
     }
 
     if (usedNames.has(argName)) {
@@ -49,9 +51,7 @@ export function buildToolArgsSchema(op: ResolvedOperation): Record<string, z.Zod
 
     let zodType = schemaToZod(param.schema);
     const labeledIn = param.in === "header" ? "header" : param.in;
-    const desc = param.description
-      ? `[${labeledIn} param] ${param.description}`
-      : `[${labeledIn} param]`;
+    const desc = param.description ? `[${labeledIn} param] ${param.description}` : `[${labeledIn} param]`;
     zodType = zodType.describe(desc);
     if (!param.required) zodType = zodType.optional() as z.ZodTypeAny;
 
@@ -61,15 +61,15 @@ export function buildToolArgsSchema(op: ResolvedOperation): Record<string, z.Zod
   if (op.requestBodySchema) {
     let bodyZod = schemaToZod(op.requestBodySchema).describe("Request body (JSON)");
     if (!op.requestBodyRequired) bodyZod = bodyZod.optional() as z.ZodTypeAny;
-    shape["body"] = bodyZod;
+    shape.body = bodyZod;
   }
 
-  shape["bearer_token"] = z
+  shape.bearer_token = z
     .string()
     .optional()
     .describe("Bearer token to authenticate this request (overrides OPENAPI_TOKEN)");
 
-  shape["custom_headers"] = z
+  shape.custom_headers = z
     .record(z.string())
     .optional()
     .describe('Additional request headers as key-value pairs, e.g. {"X-Tenant-ID": "abc"}');
@@ -77,18 +77,14 @@ export function buildToolArgsSchema(op: ResolvedOperation): Record<string, z.Zod
   return shape;
 }
 
-export function registerTools(
-  server: McpServer,
-  operations: ResolvedOperation[],
-  config: ExecutorConfig
-): void {
+export function registerTools(server: McpServer, operations: ResolvedOperation[], config: ExecutorConfig): void {
   for (const op of operations) {
     const toolName = operationToToolName(op);
     const description = operationToDescription(op);
     const argsSchema = buildToolArgsSchema(op);
 
-    server.tool(toolName, description, argsSchema, async (rawArgs) => {
-      return executeOperation(op, rawArgs as Record<string, unknown>, config);
+    server.registerTool(toolName, { description, inputSchema: argsSchema }, async (rawArgs) => {
+      return executeOperation(op, rawArgs, config);
     });
   }
 }

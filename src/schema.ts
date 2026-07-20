@@ -1,14 +1,8 @@
-import { createHash } from "crypto";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
-import yaml from "yaml";
 import type {
   HttpMethod,
   OpenAPISpec,
   Operation,
   Parameter,
-  PathItem,
   Ref,
   RequestBody,
   ResolvedOperation,
@@ -16,6 +10,11 @@ import type {
   SchemaObject,
   SpecFilters,
 } from "./types.js";
+import { createHash } from "crypto";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
+import yaml from "yaml";
 
 export function isRef(obj: unknown): obj is Ref {
   return typeof obj === "object" && obj !== null && "$ref" in obj;
@@ -38,12 +37,16 @@ export function resolveRef<T>(ref: Ref, spec: OpenAPISpec): T {
   return current as T;
 }
 
+const MAX_SCHEMA_DEPTH = 20;
+
 export function resolveSchema(
-  schemaOrRef: SchemaObject | Ref | undefined,
+  schemaOrRef: Ref | SchemaObject | undefined,
   spec: OpenAPISpec,
-  seen: Set<string> = new Set()
+  seen = new Set<string>(),
+  depth = 0,
 ): SchemaObject | undefined {
   if (!schemaOrRef) return undefined;
+  if (depth > MAX_SCHEMA_DEPTH) return { type: "object", description: "[max depth exceeded]" };
   if (isRef(schemaOrRef)) {
     const refStr = schemaOrRef.$ref;
     if (!refStr.startsWith("#/")) return { type: "object", description: "[external $ref not supported]" };
@@ -51,53 +54,13 @@ export function resolveSchema(
     const next = new Set(seen);
     next.add(refStr);
     try {
-      const resolved = resolveRef<SchemaObject | Ref>(schemaOrRef, spec);
-      return resolveSchema(resolved, spec, next);
+      const resolved = resolveRef<Ref | SchemaObject>(schemaOrRef, spec);
+      return resolveSchema(resolved, spec, next, depth + 1);
     } catch {
       return { type: "object", description: `[unresolved: ${refStr}]` };
     }
   }
   return schemaOrRef;
-}
-
-function resolveParameter(paramOrRef: Parameter | Ref, spec: OpenAPISpec): ResolvedParameter | null {
-  let param: Parameter;
-  try {
-    param = isRef(paramOrRef) ? resolveRef<Parameter>(paramOrRef, spec) : paramOrRef;
-  } catch {
-    return null;
-  }
-  const schema = resolveSchema(param.schema, spec);
-  return { ...param, schema };
-}
-
-function resolveRequestBody(
-  bodyOrRef: RequestBody | Ref | undefined,
-  spec: OpenAPISpec
-): { schema?: SchemaObject; required: boolean; contentType: string } {
-  if (!bodyOrRef) return { required: false, contentType: "application/json" };
-
-  let body: RequestBody;
-  try {
-    body = isRef(bodyOrRef) ? resolveRef<RequestBody>(bodyOrRef, spec) : bodyOrRef;
-  } catch {
-    return { required: false, contentType: "application/json" };
-  }
-
-  const jsonContent = body.content["application/json"];
-  const firstKey = Object.keys(body.content)[0] ?? "application/json";
-  const content = jsonContent ?? body.content[firstKey];
-  const schema = content ? resolveSchema(content.schema, spec) : undefined;
-
-  return {
-    schema,
-    required: body.required ?? false,
-    contentType: jsonContent ? "application/json" : firstKey,
-  };
-}
-
-function sanitizeOperationId(raw: string): string {
-  return raw.replace(/[^a-zA-Z0-9_]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
 }
 
 function pathToFallbackId(method: string, path: string): string {
@@ -110,7 +73,51 @@ function pathToFallbackId(method: string, path: string): string {
   return `${method}_${sanitizedPath}`;
 }
 
+function resolveParameter(paramOrRef: Parameter | Ref, spec: OpenAPISpec): null | ResolvedParameter {
+  let param: Parameter;
+  try {
+    param = isRef(paramOrRef) ? resolveRef<Parameter>(paramOrRef, spec) : paramOrRef;
+  } catch {
+    return null;
+  }
+  const schema = resolveSchema(param.schema, spec);
+  return { ...param, schema };
+}
+
+function resolveRequestBody(
+  bodyOrRef: Ref | RequestBody | undefined,
+  spec: OpenAPISpec,
+): { contentType: string; required: boolean; schema?: SchemaObject } {
+  if (!bodyOrRef) return { required: false, contentType: "application/json" };
+
+  let body: RequestBody;
+  try {
+    body = isRef(bodyOrRef) ? resolveRef<RequestBody>(bodyOrRef, spec) : bodyOrRef;
+  } catch {
+    return { required: false, contentType: "application/json" };
+  }
+
+  const hasJson = "application/json" in body.content;
+  const firstKey = Object.keys(body.content)[0] ?? "application/json";
+  const targetContent = hasJson ? body.content["application/json"] : body.content[firstKey];
+  const schema = resolveSchema(targetContent.schema, spec);
+
+  return {
+    schema,
+    required: body.required ?? false,
+    contentType: hasJson ? "application/json" : firstKey,
+  };
+}
+
+function sanitizeOperationId(raw: string): string {
+  return raw
+    .replace(/[^a-zA-Z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
 const HTTP_METHODS: HttpMethod[] = ["get", "post", "put", "patch", "delete", "head", "options", "trace"];
+const UNTAGGED = "(untagged)";
 
 export function extractOperations(spec: OpenAPISpec, filters: SpecFilters): ResolvedOperation[] {
   const paths = spec.paths ?? {};
@@ -118,32 +125,25 @@ export function extractOperations(spec: OpenAPISpec, filters: SpecFilters): Reso
   const seenIds = new Map<string, number>();
 
   for (const [path, pathItem] of Object.entries(paths)) {
-    if (!pathItem) continue;
     if (filters.pathPrefix && !path.startsWith(filters.pathPrefix)) continue;
 
-    const pathLevelParams: Array<Parameter | Ref> = (pathItem as PathItem).parameters ?? [];
+    const pathLevelParams: (Parameter | Ref)[] = pathItem.parameters ?? [];
 
     for (const method of HTTP_METHODS) {
-      const operation: Operation | undefined = (pathItem as PathItem)[method];
+      const operation: Operation | undefined = pathItem[method];
       if (!operation) continue;
       if (results.length >= filters.maxTools) {
+        const cutOffTags = summarizeCutOffTags(spec, filters, results);
         console.error(
-          `[mcp-openapi-bridge] Reached OPENAPI_MAX_TOOLS=${filters.maxTools}. Remaining operations skipped. Use OPENAPI_INCLUDE_TAGS or OPENAPI_PATH_PREFIX to narrow scope.`
+          `[mcp-openapi-bridge] Reached OPENAPI_MAX_TOOLS=${filters.maxTools}. Tags with operations cut off: ${cutOffTags}. Use OPENAPI_INCLUDE_TAGS or OPENAPI_PATH_PREFIX to narrow scope, or raise OPENAPI_MAX_TOOLS.`,
         );
         return results;
       }
 
       const tags = operation.tags ?? [];
-      if (filters.includeTags && filters.includeTags.length > 0) {
-        if (!tags.some((t) => filters.includeTags!.includes(t))) continue;
-      }
-      if (filters.excludeTags && filters.excludeTags.length > 0) {
-        if (tags.some((t) => filters.excludeTags!.includes(t))) continue;
-      }
+      if (!matchesTagFilters(tags, filters)) continue;
 
-      const rawId = operation.operationId
-        ? sanitizeOperationId(operation.operationId)
-        : pathToFallbackId(method, path);
+      const rawId = operation.operationId ? sanitizeOperationId(operation.operationId) : pathToFallbackId(method, path);
 
       const count = seenIds.get(rawId) ?? 0;
       seenIds.set(rawId, count + 1);
@@ -157,8 +157,11 @@ export function extractOperations(spec: OpenAPISpec, filters: SpecFilters): Reso
         .map((p) => resolveParameter(p, spec))
         .filter((p): p is ResolvedParameter => p !== null && p.in !== "cookie");
 
-      const { schema: requestBodySchema, required: requestBodyRequired, contentType: requestBodyContentType } =
-        resolveRequestBody(operation.requestBody, spec);
+      const {
+        schema: requestBodySchema,
+        required: requestBodyRequired,
+        contentType: requestBodyContentType,
+      } = resolveRequestBody(operation.requestBody, spec);
 
       results.push({
         operationId,
@@ -188,25 +191,37 @@ export function loadAndParseSpec(rawText: string, filePath?: string): OpenAPISpe
     throw new Error("Invalid OpenAPI spec: not an object.");
   }
   const obj = parsed as Record<string, unknown>;
-  const swaggerVersion = obj["swagger"];
+  const swaggerVersion = obj.swagger;
   if (typeof swaggerVersion === "string") {
-    throw new Error(`Unsupported OpenAPI version "${swaggerVersion}" (Swagger/OpenAPI 2.x). Only OpenAPI 3.x is supported.`);
+    throw new Error(
+      `Unsupported OpenAPI version "${swaggerVersion}" (Swagger/OpenAPI 2.x). Only OpenAPI 3.x is supported.`,
+    );
   }
-  if (typeof obj["openapi"] !== "string") {
+  if (typeof obj.openapi !== "string") {
     throw new Error("Invalid OpenAPI spec: missing or non-string 'openapi' field.");
   }
-  const version = obj["openapi"] as string;
+  const version = obj.openapi;
   if (!version.startsWith("3.")) {
     throw new Error(`Unsupported OpenAPI version "${version}". Only OpenAPI 3.x is supported.`);
   }
   return parsed as OpenAPISpec;
 }
 
-function getCachePath(url: string): string {
-  const hash = createHash("sha256").update(url).digest("hex").slice(0, 16);
-  const cacheDir = join(homedir(), ".cache", "mcp-openapi-bridge");
-  mkdirSync(cacheDir, { recursive: true });
-  return join(cacheDir, `${hash}.json`);
+export async function loadSpec(): Promise<OpenAPISpec> {
+  const specPath = process.env.OPENAPI_SPEC_PATH;
+  const specUrl = process.env.OPENAPI_SPEC_URL;
+
+  if (specPath) {
+    const raw = readFileSync(specPath, "utf-8");
+    return loadAndParseSpec(raw, specPath);
+  }
+
+  if (specUrl) {
+    const raw = await fetchSpecWithCache(specUrl);
+    return loadAndParseSpec(raw, specUrl);
+  }
+
+  throw new Error("OPENAPI_SPEC_PATH or OPENAPI_SPEC_URL must be set.");
 }
 
 async function fetchSpecWithCache(url: string): Promise<string> {
@@ -229,19 +244,54 @@ async function fetchSpecWithCache(url: string): Promise<string> {
   return text;
 }
 
-export async function loadSpec(): Promise<OpenAPISpec> {
-  const specPath = process.env.OPENAPI_SPEC_PATH;
-  const specUrl = process.env.OPENAPI_SPEC_URL;
+function getCachePath(url: string): string {
+  const hash = createHash("sha256").update(url).digest("hex").slice(0, 16);
+  const cacheDir = join(homedir(), ".cache", "mcp-openapi-bridge");
+  mkdirSync(cacheDir, { recursive: true });
+  return join(cacheDir, `${hash}.json`);
+}
 
-  if (specPath) {
-    const raw = readFileSync(specPath, "utf-8");
-    return loadAndParseSpec(raw, specPath);
+function matchesTagFilters(tags: string[], filters: SpecFilters): boolean {
+  const { includeTags, excludeTags } = filters;
+  if (includeTags && includeTags.length > 0 && !tags.some((t) => includeTags.includes(t))) return false;
+  if (excludeTags && excludeTags.length > 0 && tags.some((t) => excludeTags.includes(t))) return false;
+  return true;
+}
+
+/**
+ * Reports which tags lost operations to the OPENAPI_MAX_TOOLS cap, e.g. "repos (0/203), issues
+ * (1/55)". Without this, truncating a large spec (GitHub, Stripe) silently registers whatever
+ * operations happen to appear first in the spec's path order, which can leave entire tags —
+ * including ones a user would expect, like "repos" — completely unregistered with no indication
+ * why. This is a second, cheap, tags-only pass over the spec (no schema resolution), so it's only
+ * paid for in the truncation case.
+ */
+function summarizeCutOffTags(spec: OpenAPISpec, filters: SpecFilters, registered: ResolvedOperation[]): string {
+  const registeredCounts = new Map<string, number>();
+  for (const op of registered) {
+    for (const tag of op.tags && op.tags.length > 0 ? op.tags : [UNTAGGED]) {
+      registeredCounts.set(tag, (registeredCounts.get(tag) ?? 0) + 1);
+    }
   }
 
-  if (specUrl) {
-    const raw = await fetchSpecWithCache(specUrl);
-    return loadAndParseSpec(raw, specUrl);
+  const totalCounts = new Map<string, number>();
+  for (const [path, pathItem] of Object.entries(spec.paths ?? {})) {
+    if (filters.pathPrefix && !path.startsWith(filters.pathPrefix)) continue;
+    for (const method of HTTP_METHODS) {
+      const operation = pathItem[method];
+      if (!operation) continue;
+      const tags = operation.tags ?? [];
+      if (!matchesTagFilters(tags, filters)) continue;
+      for (const tag of tags.length > 0 ? tags : [UNTAGGED]) {
+        totalCounts.set(tag, (totalCounts.get(tag) ?? 0) + 1);
+      }
+    }
   }
 
-  throw new Error("OPENAPI_SPEC_PATH or OPENAPI_SPEC_URL must be set.");
+  const cutOff: string[] = [];
+  for (const [tag, total] of totalCounts) {
+    const got = registeredCounts.get(tag) ?? 0;
+    if (got < total) cutOff.push(`${tag} (${got}/${total})`);
+  }
+  return cutOff.length > 0 ? cutOff.sort().join(", ") : "(none)";
 }

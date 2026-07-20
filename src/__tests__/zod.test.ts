@@ -1,7 +1,7 @@
+import type { SchemaObject } from "../types.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { schemaToZod } from "../zod.js";
-import type { SchemaObject } from "../types.js";
 
 describe("schemaToZod", () => {
   it("returns z.any() for undefined schema", () => {
@@ -102,24 +102,115 @@ describe("schemaToZod", () => {
     expect(zod.safeParse(11).success).toBe(false);
   });
 
-  it("falls back to z.any() for allOf", () => {
-    const zod = schemaToZod({ allOf: [{ type: "string" }, { type: "integer" }] });
-    expect(zod.safeParse("anything").success).toBe(true);
-    expect(zod.safeParse(42).success).toBe(true);
+  it("handles allOf as intersection", () => {
+    const zod = schemaToZod({
+      allOf: [
+        { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+        { type: "object", properties: { age: { type: "integer" } }, required: ["age"] },
+      ],
+    });
+    expect(zod.safeParse({ name: "Alice", age: 30 }).success).toBe(true);
+    expect(zod.safeParse({ name: "Alice" }).success).toBe(false);
+    expect(zod.safeParse({ age: 30 }).success).toBe(false);
   });
 
-  it("falls back to z.any() for anyOf", () => {
+  it("handles allOf with a single schema", () => {
+    const zod = schemaToZod({ allOf: [{ type: "string" }] });
+    expect(zod.safeParse("hello").success).toBe(true);
+    expect(zod.safeParse(42).success).toBe(false);
+  });
+
+  it("handles allOf with nullable", () => {
+    const zod = schemaToZod({ allOf: [{ type: "string" }], nullable: true });
+    expect(zod.safeParse(null).success).toBe(true);
+    expect(zod.safeParse("hello").success).toBe(true);
+  });
+
+  it("handles anyOf as union", () => {
+    const zod = schemaToZod({ anyOf: [{ type: "string" }, { type: "integer" }] });
+    expect(zod.safeParse("hello").success).toBe(true);
+    expect(zod.safeParse(42).success).toBe(true);
+    expect(zod.safeParse(true).success).toBe(false);
+  });
+
+  it("handles anyOf with a single schema", () => {
     const zod = schemaToZod({ anyOf: [{ type: "string" }] });
+    expect(zod.safeParse("hello").success).toBe(true);
+    expect(zod.safeParse(42).success).toBe(false);
+  });
+
+  it("handles oneOf as union", () => {
+    const zod = schemaToZod({ oneOf: [{ type: "string" }, { type: "integer" }] });
+    expect(zod.safeParse("hello").success).toBe(true);
     expect(zod.safeParse(42).success).toBe(true);
   });
 
-  it("falls back to z.any() for oneOf", () => {
+  it("handles oneOf with a single schema", () => {
     const zod = schemaToZod({ oneOf: [{ type: "string" }] });
-    expect(zod.safeParse(42).success).toBe(true);
+    expect(zod.safeParse("hello").success).toBe(true);
+    expect(zod.safeParse(42).success).toBe(false);
+  });
+
+  it("preserves description on composition schemas", () => {
+    const zod = schemaToZod({ anyOf: [{ type: "string" }, { type: "integer" }], description: "An ID" });
+    expect(zod.description).toBe("An ID");
+  });
+
+  it("applies date-time format constraint", () => {
+    const zod = schemaToZod({ type: "string", format: "date-time" });
+    expect(zod.safeParse("2024-01-01T00:00:00Z").success).toBe(true);
+    expect(zod.safeParse("not-a-date").success).toBe(false);
+  });
+
+  it("applies date format constraint", () => {
+    const zod = schemaToZod({ type: "string", format: "date" });
+    expect(zod.safeParse("2024-01-01").success).toBe(true);
+    expect(zod.safeParse("not-a-date").success).toBe(false);
+  });
+
+  it("applies email format constraint", () => {
+    const zod = schemaToZod({ type: "string", format: "email" });
+    expect(zod.safeParse("user@example.com").success).toBe(true);
+    expect(zod.safeParse("not-an-email").success).toBe(false);
+  });
+
+  it("applies uri format constraint", () => {
+    const zod = schemaToZod({ type: "string", format: "uri" });
+    expect(zod.safeParse("https://example.com").success).toBe(true);
+    expect(zod.safeParse("not-a-uri").success).toBe(false);
+  });
+
+  it("applies url format constraint", () => {
+    const zod = schemaToZod({ type: "string", format: "url" });
+    expect(zod.safeParse("https://example.com").success).toBe(true);
+    expect(zod.safeParse("not-a-url").success).toBe(false);
+  });
+
+  it("applies uuid format constraint", () => {
+    const zod = schemaToZod({ type: "string", format: "uuid" });
+    expect(zod.safeParse("550e8400-e29b-41d4-a716-446655440000").success).toBe(true);
+    expect(zod.safeParse("not-a-uuid").success).toBe(false);
+  });
+
+  it("applies ipv4 format constraint", () => {
+    const zod = schemaToZod({ type: "string", format: "ipv4" });
+    expect(zod.safeParse("192.168.1.1").success).toBe(true);
+    expect(zod.safeParse("not-an-ip").success).toBe(false);
+  });
+
+  it("applies ipv6 format constraint", () => {
+    const zod = schemaToZod({ type: "string", format: "ipv6" });
+    expect(zod.safeParse("::1").success).toBe(true);
+    expect(zod.safeParse("not-an-ip").success).toBe(false);
+  });
+
+  it("ignores unknown format", () => {
+    const zod = schemaToZod({ type: "string", format: "unknown-format" });
+    expect(zod.safeParse("anything").success).toBe(true);
   });
 
   it("falls back to z.any() for unknown type", () => {
-    const zod = schemaToZod({ type: "unknown-type" } as SchemaObject);
+    const zod = schemaToZod({ type: "unknown-type" });
     expect(zod.safeParse("anything").success).toBe(true);
   });
 
@@ -133,7 +224,7 @@ describe("schemaToZod", () => {
     const result = zod.safeParse({ name: "Alice", extra: "field" });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect((result.data as Record<string, unknown>)["extra"]).toBe("field");
+      expect((result.data as Record<string, unknown>).extra).toBe("field");
     }
   });
 });

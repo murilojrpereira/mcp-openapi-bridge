@@ -1,6 +1,6 @@
+import type { ResolvedOperation } from "../types.js";
 import { describe, expect, it } from "vitest";
 import { buildToolArgsSchema, operationToDescription, operationToToolName } from "../tools.js";
-import type { ResolvedOperation } from "../types.js";
 
 function makeOp(overrides: Partial<ResolvedOperation> = {}): ResolvedOperation {
   return {
@@ -57,20 +57,20 @@ describe("operationToDescription", () => {
 describe("buildToolArgsSchema", () => {
   it("always includes bearer_token and custom_headers", () => {
     const schema = buildToolArgsSchema(makeOp());
-    expect(schema["bearer_token"]).toBeDefined();
-    expect(schema["custom_headers"]).toBeDefined();
+    expect(schema.bearer_token).toBeDefined();
+    expect(schema.custom_headers).toBeDefined();
   });
 
   it("bearer_token is optional", () => {
     const schema = buildToolArgsSchema(makeOp());
-    expect(schema["bearer_token"].safeParse(undefined).success).toBe(true);
-    expect(schema["bearer_token"].safeParse("token").success).toBe(true);
+    expect(schema.bearer_token.safeParse(undefined).success).toBe(true);
+    expect(schema.bearer_token.safeParse("token").success).toBe(true);
   });
 
   it("custom_headers accepts record", () => {
     const schema = buildToolArgsSchema(makeOp());
-    expect(schema["custom_headers"].safeParse({ "X-Foo": "bar" }).success).toBe(true);
-    expect(schema["custom_headers"].safeParse(undefined).success).toBe(true);
+    expect(schema.custom_headers.safeParse({ "X-Foo": "bar" }).success).toBe(true);
+    expect(schema.custom_headers.safeParse(undefined).success).toBe(true);
   });
 
   it("maps path parameters directly by name", () => {
@@ -78,8 +78,8 @@ describe("buildToolArgsSchema", () => {
       parameters: [{ name: "petId", in: "path", required: true, schema: { type: "string" } }],
     });
     const schema = buildToolArgsSchema(op);
-    expect(schema["petId"]).toBeDefined();
-    expect(schema["petId"].safeParse("abc").success).toBe(true);
+    expect(schema.petId).toBeDefined();
+    expect(schema.petId.safeParse("abc").success).toBe(true);
   });
 
   it("marks required params as required in schema", () => {
@@ -87,7 +87,7 @@ describe("buildToolArgsSchema", () => {
       parameters: [{ name: "petId", in: "path", required: true, schema: { type: "string" } }],
     });
     const schema = buildToolArgsSchema(op);
-    expect(schema["petId"].safeParse(undefined).success).toBe(false);
+    expect(schema.petId.safeParse(undefined).success).toBe(false);
   });
 
   it("marks optional params as optional in schema", () => {
@@ -95,7 +95,7 @@ describe("buildToolArgsSchema", () => {
       parameters: [{ name: "limit", in: "query", required: false, schema: { type: "integer" } }],
     });
     const schema = buildToolArgsSchema(op);
-    expect(schema["limit"].safeParse(undefined).success).toBe(true);
+    expect(schema.limit.safeParse(undefined).success).toBe(true);
   });
 
   it("prefixes header params with header_", () => {
@@ -103,7 +103,7 @@ describe("buildToolArgsSchema", () => {
       parameters: [{ name: "X-Request-ID", in: "header", schema: { type: "string" } }],
     });
     const schema = buildToolArgsSchema(op);
-    expect(schema["header_x_request_id"]).toBeDefined();
+    expect(schema.header_x_request_id).toBeDefined();
     expect(schema["X-Request-ID"]).toBeUndefined();
   });
 
@@ -114,9 +114,9 @@ describe("buildToolArgsSchema", () => {
       requestBodyRequired: true,
     });
     const schema = buildToolArgsSchema(op);
-    expect(schema["body"]).toBeDefined();
-    expect(schema["body"].safeParse(undefined).success).toBe(false);
-    expect(schema["body"].safeParse({ name: "Spot" }).success).toBe(true);
+    expect(schema.body).toBeDefined();
+    expect(schema.body.safeParse(undefined).success).toBe(false);
+    expect(schema.body.safeParse({ name: "Spot" }).success).toBe(true);
   });
 
   it("body is optional when requestBodyRequired is false", () => {
@@ -126,6 +126,6 @@ describe("buildToolArgsSchema", () => {
       requestBodyRequired: false,
     });
     const schema = buildToolArgsSchema(op);
-    expect(schema["body"].safeParse(undefined).success).toBe(true);
+    expect(schema.body.safeParse(undefined).success).toBe(true);
   });
 });

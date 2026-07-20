@@ -1,5 +1,5 @@
 import type { OpenAPISpec, Ref, SchemaObject } from "../types.js";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { extractOperations, isRef, loadAndParseSpec, resolveRef, resolveSchema } from "../schema.js";
 
 const PETSTORE_SPEC: OpenAPISpec = {
@@ -220,6 +220,37 @@ describe("extractOperations", () => {
   it("respects maxTools cap", () => {
     const ops = extractOperations(PETSTORE_SPEC, { maxTools: 2 });
     expect(ops.length).toBe(2);
+  });
+
+  describe("cut-off tag reporting on truncation", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("logs which tags lost operations to the cap", () => {
+      const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const spec: OpenAPISpec = {
+        openapi: "3.0.0",
+        info: { title: "Test", version: "1.0.0" },
+        paths: {
+          "/a": { get: { operationId: "a", tags: ["repos"], responses: {} } },
+          "/b": { get: { operationId: "b", tags: ["repos"], responses: {} } },
+          "/c": { get: { operationId: "c", tags: ["issues"], responses: {} } },
+        },
+      };
+      const ops = extractOperations(spec, { maxTools: 1 });
+      expect(ops.length).toBe(1);
+      const logged = spy.mock.calls.map((call) => String(call[0])).join("\n");
+      expect(logged).toContain("Tags with operations cut off");
+      expect(logged).toContain("repos (1/2)");
+      expect(logged).toContain("issues (0/1)");
+    });
+
+    it("does not log when nothing is cut off", () => {
+      const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      extractOperations(PETSTORE_SPEC, { maxTools: 128 });
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   it("resolves path-level parameters onto operations", () => {

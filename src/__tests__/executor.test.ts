@@ -90,6 +90,7 @@ describe("executeOperation", () => {
   });
 
   function mockFetch(status: number, body: unknown, contentType = "application/json") {
+    const text = contentType.includes("application/json") ? JSON.stringify(body) : String(body);
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -98,7 +99,24 @@ describe("executeOperation", () => {
           get: (key: string) => (key === "content-type" ? contentType : null),
         },
         json: () => Promise.resolve(body),
-        text: () => Promise.resolve(String(body)),
+        text: () => Promise.resolve(text),
+        body: null,
+      }),
+    );
+  }
+
+  /** Mimics a fetch Response whose body is not valid JSON (e.g. plain text) but is served with an
+   * `application/json` content-type — a real quirk observed against Swagger's public Petstore demo. */
+  function mockFetchMalformedJson(status: number, rawText: string, contentType = "application/json") {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        status,
+        headers: {
+          get: (key: string) => (key === "content-type" ? contentType : null),
+        },
+        json: () => Promise.reject(new SyntaxError(`Unexpected token in JSON`)),
+        text: () => Promise.resolve(rawText),
         body: null,
       }),
     );
@@ -130,6 +148,7 @@ describe("executeOperation", () => {
       status: 200,
       headers: { get: () => "application/json" },
       json: () => Promise.resolve({}),
+      text: () => Promise.resolve("{}"),
     });
     vi.stubGlobal("fetch", fetchMock);
     await executeOperation(makeOp(), { bearer_token: "per-call-token" }, config);
@@ -142,6 +161,7 @@ describe("executeOperation", () => {
       status: 200,
       headers: { get: () => "application/json" },
       json: () => Promise.resolve({}),
+      text: () => Promise.resolve("{}"),
     });
     vi.stubGlobal("fetch", fetchMock);
     await executeOperation(makeOp(), { custom_headers: { "X-Tenant": "abc" } }, config);
@@ -154,6 +174,7 @@ describe("executeOperation", () => {
       status: 201,
       headers: { get: () => "application/json" },
       json: () => Promise.resolve({ id: 2 }),
+      text: () => Promise.resolve('{"id":2}'),
     });
     vi.stubGlobal("fetch", fetchMock);
     const op = makeOp({
@@ -180,5 +201,70 @@ describe("executeOperation", () => {
     mockFetch(200, "plain text body", "text/plain");
     const result = await executeOperation(makeOp(), {}, config);
     expect(result.content[0].text).toContain("plain text body");
+  });
+
+  it("falls back to raw text without throwing when content-type is application/json but the body isn't valid JSON", async () => {
+    mockFetchMalformedJson(404, "Pet not found");
+    const result = await executeOperation(makeOp(), {}, config);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("HTTP 404");
+    expect(result.content[0].text).toContain("Pet not found");
+  });
+});
+
+describe("executeOperation retries", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  function mockResponse(status: number, retryAfter: null | string = null) {
+    return {
+      status,
+      headers: { get: (key: string) => (key === "retry-after" ? retryAfter : "application/json") },
+      json: () => Promise.resolve({}),
+      text: () => Promise.resolve("{}"),
+      body: { cancel: () => Promise.resolve() },
+    };
+  }
+
+  it("does not retry when maxRetries is unset (default off)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(429));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await executeOperation(makeOp(), {}, config);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.isError).toBe(true);
+  });
+
+  it("retries on 429 up to maxRetries and returns the eventual success", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValueOnce(mockResponse(429, "0")).mockResolvedValueOnce(mockResponse(200));
+    vi.stubGlobal("fetch", fetchMock);
+    const retryConfig = { ...config, maxRetries: 2 };
+    const promise = executeOperation(makeOp(), {}, retryConfig);
+    await vi.runAllTimersAsync();
+    const result = await promise;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.isError).toBeFalsy();
+  });
+
+  it("gives up after maxRetries and returns the last error response", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(503));
+    vi.stubGlobal("fetch", fetchMock);
+    const retryConfig = { ...config, maxRetries: 2 };
+    const promise = executeOperation(makeOp(), {}, retryConfig);
+    await vi.runAllTimersAsync();
+    const result = await promise;
+    expect(fetchMock).toHaveBeenCalledTimes(3); // initial attempt + 2 retries
+    expect(result.isError).toBe(true);
+  });
+
+  it("does not retry non-retryable status codes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(404));
+    vi.stubGlobal("fetch", fetchMock);
+    const retryConfig = { ...config, maxRetries: 3 };
+    await executeOperation(makeOp(), {}, retryConfig);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

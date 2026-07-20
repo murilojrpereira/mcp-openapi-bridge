@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `OPENAPI_MAX_RETRIES` — opt-in retry with exponential backoff (honoring `Retry-After`) for `429`/`502`/`503`/`504` responses, default `0` (disabled), clamped to 0–5
+- Logs which OpenAPI tags lost operations when `OPENAPI_MAX_TOOLS` truncates a large spec (e.g. `repos (0/203), issues (1/55)`), so users know exactly what to add via `OPENAPI_INCLUDE_TAGS`/`OPENAPI_PATH_PREFIX` instead of silently registering an arbitrary subset
+- Step-by-step README examples against two public specs (Swagger Petstore and the GitHub REST API), covering tool naming, tag scoping for large specs, and error passthrough
+- Opt-in live smoke test suite (`npm run test:live`) exercising real HTTP calls against the public Petstore demo, skipped by default so it never affects `npm test` or CI
+- `SECURITY.md` with a vulnerability disclosure policy and a summary of the project's threat model
+- A "Security" section in the README summarizing the fixed-target-URL (no SSRF) and secret-redaction design properties, linking to `docs/architecture.md` and `SECURITY.md`
+
+### Fixed
+- Fixed a crash (`Body is unusable: Body has already been read`) when an API responds with an `application/json` content-type header but a non-JSON body — observed live against Swagger's public Petstore demo. The response body is now read once as text and parsed, instead of calling `response.json()` first and falling back to `response.text()` on failure (which doesn't work, since a failed `json()` call still consumes the stream)
+- Removed a stale README limitations claim that `allOf`/`anyOf`/`oneOf` schemas fall back to `z.any()` — `schemaToZod` has built proper intersection/union types for all three since initial release
+
 ## [1.0.1] - 2026-07-09
 
 ### Added

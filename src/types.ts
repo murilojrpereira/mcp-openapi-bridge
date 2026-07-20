@@ -16,6 +16,8 @@ export interface Components {
 export interface ExecutorConfig {
   authConfig: AuthConfig;
   baseUrl: string;
+  /** Number of retries for 429/502/503/504 responses, honoring Retry-After when present. 0 disables retries (default). */
+  maxRetries?: number;
 }
 
 export type HttpMethod = "delete" | "get" | "head" | "options" | "patch" | "post" | "put" | "trace";

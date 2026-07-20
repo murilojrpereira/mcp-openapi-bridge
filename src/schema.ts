@@ -117,6 +117,7 @@ function sanitizeOperationId(raw: string): string {
 }
 
 const HTTP_METHODS: HttpMethod[] = ["get", "post", "put", "patch", "delete", "head", "options", "trace"];
+const UNTAGGED = "(untagged)";
 
 export function extractOperations(spec: OpenAPISpec, filters: SpecFilters): ResolvedOperation[] {
   const paths = spec.paths ?? {};
@@ -132,20 +133,15 @@ export function extractOperations(spec: OpenAPISpec, filters: SpecFilters): Reso
       const operation: Operation | undefined = pathItem[method];
       if (!operation) continue;
       if (results.length >= filters.maxTools) {
+        const cutOffTags = summarizeCutOffTags(spec, filters, results);
         console.error(
-          `[mcp-openapi-bridge] Reached OPENAPI_MAX_TOOLS=${filters.maxTools}. Remaining operations skipped. Use OPENAPI_INCLUDE_TAGS or OPENAPI_PATH_PREFIX to narrow scope.`,
+          `[mcp-openapi-bridge] Reached OPENAPI_MAX_TOOLS=${filters.maxTools}. Tags with operations cut off: ${cutOffTags}. Use OPENAPI_INCLUDE_TAGS or OPENAPI_PATH_PREFIX to narrow scope, or raise OPENAPI_MAX_TOOLS.`,
         );
         return results;
       }
 
       const tags = operation.tags ?? [];
-      const { includeTags, excludeTags } = filters;
-      if (includeTags && includeTags.length > 0) {
-        if (!tags.some((t) => includeTags.includes(t))) continue;
-      }
-      if (excludeTags && excludeTags.length > 0) {
-        if (tags.some((t) => excludeTags.includes(t))) continue;
-      }
+      if (!matchesTagFilters(tags, filters)) continue;
 
       const rawId = operation.operationId ? sanitizeOperationId(operation.operationId) : pathToFallbackId(method, path);
 
@@ -253,4 +249,49 @@ function getCachePath(url: string): string {
   const cacheDir = join(homedir(), ".cache", "mcp-openapi-bridge");
   mkdirSync(cacheDir, { recursive: true });
   return join(cacheDir, `${hash}.json`);
+}
+
+function matchesTagFilters(tags: string[], filters: SpecFilters): boolean {
+  const { includeTags, excludeTags } = filters;
+  if (includeTags && includeTags.length > 0 && !tags.some((t) => includeTags.includes(t))) return false;
+  if (excludeTags && excludeTags.length > 0 && tags.some((t) => excludeTags.includes(t))) return false;
+  return true;
+}
+
+/**
+ * Reports which tags lost operations to the OPENAPI_MAX_TOOLS cap, e.g. "repos (0/203), issues
+ * (1/55)". Without this, truncating a large spec (GitHub, Stripe) silently registers whatever
+ * operations happen to appear first in the spec's path order, which can leave entire tags —
+ * including ones a user would expect, like "repos" — completely unregistered with no indication
+ * why. This is a second, cheap, tags-only pass over the spec (no schema resolution), so it's only
+ * paid for in the truncation case.
+ */
+function summarizeCutOffTags(spec: OpenAPISpec, filters: SpecFilters, registered: ResolvedOperation[]): string {
+  const registeredCounts = new Map<string, number>();
+  for (const op of registered) {
+    for (const tag of op.tags && op.tags.length > 0 ? op.tags : [UNTAGGED]) {
+      registeredCounts.set(tag, (registeredCounts.get(tag) ?? 0) + 1);
+    }
+  }
+
+  const totalCounts = new Map<string, number>();
+  for (const [path, pathItem] of Object.entries(spec.paths ?? {})) {
+    if (filters.pathPrefix && !path.startsWith(filters.pathPrefix)) continue;
+    for (const method of HTTP_METHODS) {
+      const operation = pathItem[method];
+      if (!operation) continue;
+      const tags = operation.tags ?? [];
+      if (!matchesTagFilters(tags, filters)) continue;
+      for (const tag of tags.length > 0 ? tags : [UNTAGGED]) {
+        totalCounts.set(tag, (totalCounts.get(tag) ?? 0) + 1);
+      }
+    }
+  }
+
+  const cutOff: string[] = [];
+  for (const [tag, total] of totalCounts) {
+    const got = registeredCounts.get(tag) ?? 0;
+    if (got < total) cutOff.push(`${tag} (${got}/${total})`);
+  }
+  return cutOff.length > 0 ? cutOff.sort().join(", ") : "(none)";
 }

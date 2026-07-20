@@ -55,7 +55,8 @@ async function main() {
   };
 
   const operations = extractOperations(spec, filters);
-  const config: ExecutorConfig = { baseUrl: API_BASE_URL, authConfig };
+  const maxRetries = Math.max(0, Math.min(5, parseInt(process.env.OPENAPI_MAX_RETRIES ?? "0", 10) || 0));
+  const config: ExecutorConfig = { baseUrl: API_BASE_URL, authConfig, maxRetries };
 
   console.error(`[mcp-openapi-bridge] Registering ${operations.length} tools from "${spec.info.title}" spec...`);
 

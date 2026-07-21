@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-21
+
 ### Added
 - `OPENAPI_MAX_RETRIES` — opt-in retry with exponential backoff (honoring `Retry-After`) for `429`/`502`/`503`/`504` responses, default `0` (disabled), clamped to 0–5
 - Logs which OpenAPI tags lost operations when `OPENAPI_MAX_TOOLS` truncates a large spec (e.g. `repos (0/203), issues (1/55)`), so users know exactly what to add via `OPENAPI_INCLUDE_TAGS`/`OPENAPI_PATH_PREFIX` instead of silently registering an arbitrary subset

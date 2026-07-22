@@ -97,15 +97,16 @@ function resolveRequestBody(
     return { required: false, contentType: "application/json" };
   }
 
-  const hasJson = "application/json" in body.content;
-  const firstKey = Object.keys(body.content)[0] ?? "application/json";
-  const targetContent = hasJson ? body.content["application/json"] : body.content[firstKey];
-  const schema = resolveSchema(targetContent.schema, spec);
+  const entries = Object.entries(body.content);
+  if (entries.length === 0) {
+    return { required: body.required ?? false, contentType: "application/json" };
+  }
+  const [contentType, targetContent] = entries.find(([key]) => key === "application/json") ?? entries[0];
 
   return {
-    schema,
+    contentType,
     required: body.required ?? false,
-    contentType: hasJson ? "application/json" : firstKey,
+    schema: resolveSchema(targetContent.schema, spec),
   };
 }
 

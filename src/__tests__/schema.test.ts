@@ -275,4 +275,22 @@ describe("extractOperations", () => {
     expect(createPet.requestBodyContentType).toBe("application/json");
     expect(createPet.requestBodySchema?.type).toBe("object");
   });
+
+  it("does not crash on a requestBody with an empty content map", () => {
+    const spec: OpenAPISpec = {
+      openapi: "3.0.0",
+      info: { title: "Malformed", version: "1.0.0" },
+      paths: {
+        "/foo": {
+          post: {
+            operationId: "foo",
+            requestBody: { required: true, content: {} },
+            responses: { "200": { description: "OK" } },
+          },
+        },
+      },
+    };
+    const ops = extractOperations(spec, defaultFilters);
+    expect(ops[0].requestBodySchema).toBeUndefined();
+  });
 });

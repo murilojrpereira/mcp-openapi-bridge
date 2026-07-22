@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-22
+
+### Fixed
+- Fixed a crash on startup when an OpenAPI operation's `requestBody.content` is an empty object (`{}`) — a shape the spec disallows but real-world/hand-edited specs can still have. `resolveRequestBody` now treats a missing content entry the same as no request body instead of throwing out of `extractOperations`
+
 ## [1.1.0] - 2026-07-21
 
 ### Added

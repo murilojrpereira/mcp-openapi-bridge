@@ -204,6 +204,20 @@ describe("schemaToZod", () => {
     expect(zod.safeParse("not-an-ip").success).toBe(false);
   });
 
+  it("combines a format constraint with pattern", () => {
+    const zod = schemaToZod({ type: "string", format: "email", pattern: "^admin@" });
+    expect(zod.safeParse("admin@example.com").success).toBe(true);
+    expect(zod.safeParse("user@example.com").success).toBe(false);
+    expect(zod.safeParse("not-an-email").success).toBe(false);
+  });
+
+  it("combines a format constraint with minLength/maxLength", () => {
+    const zod = schemaToZod({ type: "string", format: "ipv4", minLength: 8, maxLength: 9 });
+    expect(zod.safeParse("10.0.0.1").success).toBe(true); // 8 chars, valid ipv4
+    expect(zod.safeParse("10.0.0.100").success).toBe(false); // 10 chars, exceeds maxLength
+    expect(zod.safeParse("not-an-ip").success).toBe(false); // fails format
+  });
+
   it("ignores unknown format", () => {
     const zod = schemaToZod({ type: "string", format: "unknown-format" });
     expect(zod.safeParse("anything").success).toBe(true);

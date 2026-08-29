@@ -49,36 +49,6 @@ export function schemaToZod(schema: SchemaObject | undefined): z.ZodType {
   return base;
 }
 
-/**
- * ipv4/ipv6 have no chained-method equivalent in Zod v4 (`.ip()` was removed) — they replace the
- * base string schema entirely. uuid uses `z.guid()` rather than the new stricter `z.uuid()` to
- * preserve the lenient (non-RFC-9562-strict) validation OpenAPI specs generally assume.
- */
-function applyStringFormat(s: z.ZodString, format: string): z.ZodType {
-  switch (format) {
-    case "date":
-      return z.iso.date();
-    case "date-time":
-    case "datetime":
-      return z.iso.datetime();
-    case "email":
-      return z.email();
-    case "ipv4":
-      return z.ipv4();
-    case "ipv6":
-      return z.ipv6();
-    case "time":
-      return z.iso.time();
-    case "uri":
-    case "url":
-      return z.url();
-    case "uuid":
-      return z.guid();
-    default:
-      return s;
-  }
-}
-
 function buildAllOfZod(schema: SchemaObject): z.ZodType {
   const subs = (schema.allOf ?? []).map((s) => schemaToZod(s as SchemaObject)).filter(Boolean);
   if (subs.length === 0) return z.any();
@@ -141,7 +111,7 @@ function buildStringZod(schema: SchemaObject): z.ZodType {
     }
     if (vals.length === 1) return z.literal(vals[0]);
   }
-  let s: z.ZodString = z.string();
+  let s: z._ZodString = schema.format ? stringFormatBase(schema.format) : z.string();
   if (schema.minLength !== undefined) s = s.min(schema.minLength);
   if (schema.maxLength !== undefined) s = s.max(schema.maxLength);
   if (schema.pattern) {
@@ -151,9 +121,40 @@ function buildStringZod(schema: SchemaObject): z.ZodType {
       // ignore invalid regex patterns
     }
   }
-  let result: z.ZodType = s;
-  if (schema.format) {
-    result = applyStringFormat(s, schema.format);
+  return s;
+}
+
+/**
+ * Picks the base string schema for a declared `format`. Each of these (ZodStringFormat subtypes in
+ * Zod v4) still supports chaining `.min()`/`.max()`/`.regex()`, so building the format first and
+ * layering minLength/maxLength/pattern on top — rather than building those on a plain `z.string()`
+ * and discarding them when format is applied afterward — preserves both the format check and any
+ * additional constraints declared alongside it.
+ *
+ * uuid uses `z.guid()` rather than the new stricter `z.uuid()` to preserve the lenient
+ * (non-RFC-9562-strict) validation OpenAPI specs generally assume.
+ */
+function stringFormatBase(format: string): z._ZodString {
+  switch (format) {
+    case "date":
+      return z.iso.date();
+    case "date-time":
+    case "datetime":
+      return z.iso.datetime();
+    case "email":
+      return z.email();
+    case "ipv4":
+      return z.ipv4();
+    case "ipv6":
+      return z.ipv6();
+    case "time":
+      return z.iso.time();
+    case "uri":
+    case "url":
+      return z.url();
+    case "uuid":
+      return z.guid();
+    default:
+      return z.string();
   }
-  return result;
 }

@@ -1,5 +1,5 @@
 import type { ExecutorConfig, ResolvedOperation } from "./types.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { executeOperation } from "./executor.js";
 import { schemaToZod } from "./zod.js";
@@ -22,8 +22,8 @@ export function operationToToolName(op: ResolvedOperation): string {
 
 const RESERVED_ARGS = new Set(["bearer_token", "body", "custom_headers"]);
 
-export function buildToolArgsSchema(op: ResolvedOperation): Record<string, z.ZodTypeAny> {
-  const shape: Record<string, z.ZodTypeAny> = {};
+export function buildToolArgsSchema(op: ResolvedOperation): Record<string, z.ZodType> {
+  const shape: Record<string, z.ZodType> = {};
   const usedNames = new Set<string>();
 
   for (const param of op.parameters) {
@@ -53,14 +53,14 @@ export function buildToolArgsSchema(op: ResolvedOperation): Record<string, z.Zod
     const labeledIn = param.in === "header" ? "header" : param.in;
     const desc = param.description ? `[${labeledIn} param] ${param.description}` : `[${labeledIn} param]`;
     zodType = zodType.describe(desc);
-    if (!param.required) zodType = zodType.optional() as z.ZodTypeAny;
+    if (!param.required) zodType = zodType.optional();
 
     shape[argName] = zodType;
   }
 
   if (op.requestBodySchema) {
     let bodyZod = schemaToZod(op.requestBodySchema).describe("Request body (JSON)");
-    if (!op.requestBodyRequired) bodyZod = bodyZod.optional() as z.ZodTypeAny;
+    if (!op.requestBodyRequired) bodyZod = bodyZod.optional();
     shape.body = bodyZod;
   }
 
@@ -70,7 +70,7 @@ export function buildToolArgsSchema(op: ResolvedOperation): Record<string, z.Zod
     .describe("Bearer token to authenticate this request (overrides OPENAPI_TOKEN)");
 
   shape.custom_headers = z
-    .record(z.string())
+    .record(z.string(), z.string())
     .optional()
     .describe('Additional request headers as key-value pairs, e.g. {"X-Tenant-ID": "abc"}');
 
@@ -83,7 +83,7 @@ export function registerTools(server: McpServer, operations: ResolvedOperation[]
     const description = operationToDescription(op);
     const argsSchema = buildToolArgsSchema(op);
 
-    server.registerTool(toolName, { description, inputSchema: argsSchema }, async (rawArgs) => {
+    server.registerTool(toolName, { description, inputSchema: z.object(argsSchema) }, async (rawArgs) => {
       return executeOperation(op, rawArgs, config);
     });
   }

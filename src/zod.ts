@@ -1,7 +1,7 @@
 import type { SchemaObject } from "./types.js";
 import { z } from "zod";
 
-export function schemaToZod(schema: SchemaObject | undefined): z.ZodTypeAny {
+export function schemaToZod(schema: SchemaObject | undefined): z.ZodType {
   if (!schema) return z.any();
 
   if (schema.allOf) {
@@ -17,7 +17,7 @@ export function schemaToZod(schema: SchemaObject | undefined): z.ZodTypeAny {
   }
 
   const rawType = Array.isArray(schema.type) ? schema.type[0] : schema.type;
-  let base: z.ZodTypeAny;
+  let base: z.ZodType;
 
   switch (rawType) {
     case "array":
@@ -49,32 +49,37 @@ export function schemaToZod(schema: SchemaObject | undefined): z.ZodTypeAny {
   return base;
 }
 
-function applyStringFormat(s: z.ZodString, format: string): z.ZodString {
+/**
+ * ipv4/ipv6 have no chained-method equivalent in Zod v4 (`.ip()` was removed) — they replace the
+ * base string schema entirely. uuid uses `z.guid()` rather than the new stricter `z.uuid()` to
+ * preserve the lenient (non-RFC-9562-strict) validation OpenAPI specs generally assume.
+ */
+function applyStringFormat(s: z.ZodString, format: string): z.ZodType {
   switch (format) {
     case "date":
-      return s.date();
+      return z.iso.date();
     case "date-time":
     case "datetime":
-      return s.datetime();
+      return z.iso.datetime();
     case "email":
-      return s.email();
+      return z.email();
     case "ipv4":
-      return s.ip({ version: "v4" });
+      return z.ipv4();
     case "ipv6":
-      return s.ip({ version: "v6" });
+      return z.ipv6();
     case "time":
-      return s.time();
+      return z.iso.time();
     case "uri":
     case "url":
-      return s.url();
+      return z.url();
     case "uuid":
-      return s.uuid();
+      return z.guid();
     default:
       return s;
   }
 }
 
-function buildAllOfZod(schema: SchemaObject): z.ZodTypeAny {
+function buildAllOfZod(schema: SchemaObject): z.ZodType {
   const subs = (schema.allOf ?? []).map((s) => schemaToZod(s as SchemaObject)).filter(Boolean);
   if (subs.length === 0) return z.any();
   if (subs.length === 1) {
@@ -89,46 +94,46 @@ function buildAllOfZod(schema: SchemaObject): z.ZodTypeAny {
   return result;
 }
 
-function buildAnyOfZod(schema: SchemaObject): z.ZodTypeAny {
+function buildAnyOfZod(schema: SchemaObject): z.ZodType {
   const subs = (schema.anyOf ?? []).map((s) => schemaToZod(s as SchemaObject)).filter(Boolean);
   if (subs.length === 0) return z.any();
-  let result = subs.length === 1 ? subs[0] : z.union(subs as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+  let result = subs.length === 1 ? subs[0] : z.union(subs as [z.ZodType, z.ZodType, ...z.ZodType[]]);
   if (schema.nullable) result = result.nullable();
   if (schema.description) result = result.describe(schema.description);
   return result;
 }
 
-function buildNumberZod(schema: SchemaObject, isInteger: boolean): z.ZodTypeAny {
+function buildNumberZod(schema: SchemaObject, isInteger: boolean): z.ZodType {
   let n = isInteger ? z.number().int() : z.number();
   if (schema.minimum !== undefined) n = n.min(schema.minimum);
   if (schema.maximum !== undefined) n = n.max(schema.maximum);
   return n;
 }
 
-function buildObjectZod(schema: SchemaObject): z.ZodTypeAny {
+function buildObjectZod(schema: SchemaObject): z.ZodType {
   const props = schema.properties;
   if (!props || Object.keys(props).length === 0) {
-    return z.record(z.any());
+    return z.record(z.string(), z.any());
   }
   const required = new Set(schema.required ?? []);
-  const shape: Record<string, z.ZodTypeAny> = {};
+  const shape: Record<string, z.ZodType> = {};
   for (const [key, propSchema] of Object.entries(props)) {
     const zodField = schemaToZod(propSchema as SchemaObject);
     shape[key] = required.has(key) ? zodField : zodField.optional();
   }
-  return z.object(shape).passthrough();
+  return z.looseObject(shape);
 }
 
-function buildOneOfZod(schema: SchemaObject): z.ZodTypeAny {
+function buildOneOfZod(schema: SchemaObject): z.ZodType {
   const subs = (schema.oneOf ?? []).map((s) => schemaToZod(s as SchemaObject)).filter(Boolean);
   if (subs.length === 0) return z.any();
-  let result = subs.length === 1 ? subs[0] : z.union(subs as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+  let result = subs.length === 1 ? subs[0] : z.union(subs as [z.ZodType, z.ZodType, ...z.ZodType[]]);
   if (schema.nullable) result = result.nullable();
   if (schema.description) result = result.describe(schema.description);
   return result;
 }
 
-function buildStringZod(schema: SchemaObject): z.ZodTypeAny {
+function buildStringZod(schema: SchemaObject): z.ZodType {
   if (schema.enum && schema.enum.length > 0) {
     const vals = schema.enum.filter((v): v is string => typeof v === "string");
     if (vals.length === schema.enum.length && vals.length >= 2) {
@@ -146,8 +151,9 @@ function buildStringZod(schema: SchemaObject): z.ZodTypeAny {
       // ignore invalid regex patterns
     }
   }
+  let result: z.ZodType = s;
   if (schema.format) {
-    s = applyStringFormat(s, schema.format);
+    result = applyStringFormat(s, schema.format);
   }
-  return s;
+  return result;
 }

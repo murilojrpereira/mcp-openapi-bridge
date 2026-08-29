@@ -2,9 +2,9 @@
 import type { ExecutorConfig, SpecFilters } from "./types.js";
 import { timingSafeEqual } from "crypto";
 import { createServer, type IncomingMessage } from "http";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
+import { McpServer } from "@modelcontextprotocol/server";
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 import { resolveAuthConfig } from "./auth.js";
 import { executeGenericRequest } from "./executor.js";
@@ -66,7 +66,7 @@ async function main() {
   function buildServer(): McpServer {
     const server = new McpServer({
       name: "mcp-openapi-bridge",
-      version: "1.0.0",
+      version: "1.2.0",
     });
 
     registerTools(server, operations, config);
@@ -75,21 +75,21 @@ async function main() {
       "execute_rest",
       {
         description: "Execute any HTTP request against the API. Use when no specific tool matches your needs.",
-        inputSchema: {
+        inputSchema: z.object({
           method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]).describe("HTTP method"),
           path: z.string().describe("API path, e.g. /orders/123"),
-          query: z.record(z.string()).optional().describe("Query parameters as key-value pairs"),
+          query: z.record(z.string(), z.string()).optional().describe("Query parameters as key-value pairs"),
           body: z.unknown().optional().describe("Request body (for POST/PUT/PATCH), serialized as JSON"),
-          headers: z.record(z.string()).optional().describe("Additional request headers"),
+          headers: z.record(z.string(), z.string()).optional().describe("Additional request headers"),
           bearer_token: z
             .string()
             .optional()
             .describe("Bearer token to authenticate this request (overrides OPENAPI_TOKEN)"),
           custom_headers: z
-            .record(z.string())
+            .record(z.string(), z.string())
             .optional()
             .describe('Additional auth/custom headers as key-value pairs, e.g. {"X-Tenant-ID": "abc"}'),
-        },
+        }),
       },
       async ({ method, path, query, body, headers, bearer_token, custom_headers }) => {
         return executeGenericRequest(API_BASE_URL, method, path, config, {
@@ -153,7 +153,7 @@ async function main() {
 
           // Stateless mode requires a fresh server+transport per request.
           const requestServer = buildServer();
-          const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+          const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
           await requestServer.connect(transport);
           res.on("close", () => {
             void transport.close();

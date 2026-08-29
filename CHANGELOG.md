@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-29
+
+### Changed
+- Migrated from `@modelcontextprotocol/sdk` v1 to the v2 SDK packages (`@modelcontextprotocol/server`, `@modelcontextprotocol/node`), adding support for the stateless MCP protocol revision `2026-07-28` (no `initialize` handshake, no `Mcp-Session-Id`, `server/discover`, Multi Round-Trip Requests) while remaining backward-compatible with 2025-era clients. The HTTP transport already built a fresh `McpServer`/transport pair per request with no session ID, so this migration required no behavioral change to request handling — only the transport/import wiring.
+- Upgraded `zod` from v3 to v4:
+  - `z.record()` call sites updated to the new required two-argument signature.
+  - `format: uuid` now validates via `z.guid()` rather than the new, stricter `z.uuid()` — v4's `z.uuid()`/`.uuid()` enforce RFC 9562 variant bits, which would reject some real-world UUIDs (e.g. version-1 GUIDs with non-conformant variant bits) that were previously accepted. `z.guid()` preserves the old lenient behavior.
+  - `format: ipv4`/`ipv6` now use the top-level `z.ipv4()`/`z.ipv6()` (Zod v4 removed the chained `.ip()` method entirely).
+  - `format: object` (no declared properties) now returns `z.looseObject(...)` instead of the deprecated `z.object(...).passthrough()`; behavior is unchanged.
+- Synced `server.json`'s version field, which had drifted out of sync with `package.json` since 1.0.0.
+
 ## [1.1.1] - 2026-07-22
 
 ### Fixed

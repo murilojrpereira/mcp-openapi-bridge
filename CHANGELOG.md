@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `format: object` (no declared properties) now returns `z.looseObject(...)` instead of the deprecated `z.object(...).passthrough()`; behavior is unchanged.
 - Synced `server.json`'s version field, which had drifted out of sync with `package.json` since 1.0.0.
 
+### Fixed
+- **Security-review followup**: fixed a regression from the zod v4 migration above where an OpenAPI field combining `format` (e.g. `email`, `uuid`, `ipv4`) with `pattern`/`minLength`/`maxLength` silently dropped the pattern/length checks — `buildStringZod` built those checks on a plain `z.string()` and then discarded that instance when applying `format`, since the v4 format constructors (`z.email()`, `z.guid()`, etc.) return independent schema instances rather than chaining onto the existing one the way v3's `.email()`/`.uuid()` methods did. Fixed by building the format-specific schema first and layering `minLength`/`maxLength`/`pattern` on top of it, since all Zod v4 string-format schemas support the same `.min()`/`.max()`/`.regex()` chain as plain strings.
+
 ## [1.1.1] - 2026-07-22
 
 ### Fixed

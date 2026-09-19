@@ -37,7 +37,15 @@ jobs:
       - name: Bump version and push tag
         id: bump
         run: |
-          NEW_TAG=$(npm version ${{ inputs.version_type }} -m "chore: release v%s")
+          NEW_TAG=$(npm version ${{ inputs.version_type }} --no-git-tag-version)
+          VERSION="${NEW_TAG#v}"
+          # server.json must track package.json: the MCP Registry rejects a
+          # version that doesn't match the package published to npm.
+          jq --arg version "$VERSION" '.version = $version | .packages |= map(.version = $version)' server.json > server.tmp
+          mv server.tmp server.json
+          git add package.json package-lock.json server.json
+          git commit -m "chore: release $NEW_TAG"
+          git tag -a "$NEW_TAG" -m "chore: release $NEW_TAG"
           git push origin main --follow-tags
           echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
 

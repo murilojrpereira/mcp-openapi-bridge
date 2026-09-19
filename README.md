@@ -44,6 +44,12 @@ claude mcp add mcp-openapi-bridge \
   -e OPENAPI_TOKEN=your-token
 ```
 
+### MCP Registry
+
+This server is published to the official [MCP Registry](https://registry.modelcontextprotocol.io) as
+`io.github.murilojrpereira/mcp-openapi-bridge`, so MCP clients that browse the registry can discover
+and install it from there.
+
 ## Examples
 
 Two worked walkthroughs against real, public OpenAPI specs — a small one to sanity-check your

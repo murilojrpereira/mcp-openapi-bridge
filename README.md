@@ -295,6 +295,8 @@ npm run format
 real-world API quirks (mismatched content-type headers, unexpected error bodies) that mocked
 unit tests can't, without introducing network flakiness into the standard suite.
 
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution guidelines and the maintainer release process.
+
 ## License
 
 MIT
